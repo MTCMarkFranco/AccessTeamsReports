@@ -253,7 +253,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Sample-App.config" />
-    <None Include="App.config" />
     <None Include="Utilities\Helper.cd" />
     <None Include="packages.config" />
   </ItemGroup>
