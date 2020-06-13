@@ -5,6 +5,7 @@ using Microsoft.Graph.Auth;
 using Microsoft.Identity.Client;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -17,9 +18,11 @@ namespace AccessTeamsReports
     {
         static async Task Main(string[] args)
         {
+
+            #region Authentication work Here
             IPublicClientApplication publicClientApplication = PublicClientApplicationBuilder
-                        .Create("debdb95b-0c44-4e47-a97e-5a4d7b9291f9")
-                        .WithAuthority("https://login.microsoftonline.com/d7037d74-e72d-44e9-8f94-c0b2b4845174")
+                        .Create(ConfigurationManager.AppSettings["APP_CLIENT_ID"])
+                        .WithAuthority(ConfigurationManager.AppSettings["AAD_AUTHORITY"])
                         .WithDefaultRedirectUri()
                         .Build();
            
@@ -38,28 +41,132 @@ namespace AccessTeamsReports
                             .ExecuteAsync();
             }
 
+            // Create the Autentication Provider with Proper Scopes for TEams Reporting APIs
             DeviceCodeProvider authProvider = new DeviceCodeProvider(publicClientApplication, scopes);
 
-            // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
-            //var queryOptions = new List<QueryOption>()
-            //    {
-            //        new QueryOption("$format", "application/json")
-            //    };
+            #endregion
 
-            // Adding a custom serializer to handle CSV and Transmogrify into JSON (check ReportCustomSerializers for specific Report Serializer)
-            HttpProvider provider = new HttpProvider(ReportCustomSerializersOptions.teamsUserActivityUserCounts);
-            GraphServiceClient graphClient = new GraphServiceClient(authProvider, provider);
+            #region Calling Reports APIs
+            // Call the APIs with the newly formed Authentication Provider
+            bool success = await PullTeamsReports(authProvider);
 
-            var x = await graphClient.Reports.GetTeamsUserActivityCounts("D30").Request().GetAsync();
-                       
-            using (StreamReader sw = new StreamReader(x.Content))
-            {
-                string json = sw.ReadToEnd();
-                Console.Write(json);
-            }
+            if (success)
+                Console.WriteLine("Jobs Finished!");
+            else
+                Console.WriteLine("Error!");
 
+            #endregion
+
+            Console.WriteLine("Press <ENTER> to close Application");
             Console.Read();
 
+
+        }
+
+        private async static Task<bool> PullTeamsReports(DeviceCodeProvider authProvider)
+        {
+            const string period = "D30";
+
+            #region GetTeamsUserActivityUserCounts
+            try
+            {
+                // Adding a custom serializer to handle CSV and Transmogrify into JSON (NOTE: check ReportCustomSerializers for specific Report Serializer)
+                HttpProvider httpProvider = new HttpProvider(ReportCustomSerializersOptions.teamsUserActivityUserCountsSerializer);
+                GraphServiceClient graphClient = new GraphServiceClient(authProvider, httpProvider);
+
+                // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
+                //var queryOptions = new List<QueryOption>()
+                //    {
+                //        new QueryOption("$format", "application/json")
+                //    };
+
+                var response = await graphClient.Reports.GetTeamsUserActivityUserCounts(period).Request(/* queryOptions */).GetAsync();
+                using (StreamReader sw = new StreamReader(response.Content))
+                {
+                    using (var file = new StreamWriter("c:\\temp\\GetTeamsUserActivityUserCounts.json", false, Encoding.UTF8))
+                    {
+                        file.Write(sw.ReadToEnd());
+                        file.Close();
+                    }
+                }
+            }
+            catch (Microsoft.Graph.ServiceException svcEx)
+            {
+                var additionalData = svcEx.Error.AdditionalData;
+                var details = additionalData["details"];
+                Console.WriteLine(string.Format("[Error]: '{0}'", details));
+                return false;
+            }
+
+            #endregion
+
+            #region GetTeamsUserActivityCounts
+            try
+            {
+                // Adding a custom serializer to handle CSV and Transmogrify into JSON (NOTE: check ReportCustomSerializers for specific Report Serializer)
+                HttpProvider httpProvider = new HttpProvider(ReportCustomSerializersOptions.teamsUserActivityCountsSerializer);
+                GraphServiceClient graphClient = new GraphServiceClient(authProvider, httpProvider);
+
+                // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
+                //var queryOptions = new List<QueryOption>()
+                //    {
+                //        new QueryOption("$format", "application/json")
+                //    };
+
+                var response = await graphClient.Reports.GetTeamsUserActivityCounts(period).Request(/* queryOptions */).GetAsync();
+                using (StreamReader sw = new StreamReader(response.Content))
+                {
+                    using (var file = new StreamWriter("c:\\temp\\GetTeamsUserActivityCounts.json", false, Encoding.UTF8))
+                    {
+                        file.Write(sw.ReadToEnd());
+                        file.Close();
+                    }
+                }
+            }
+            catch (Microsoft.Graph.ServiceException svcEx)
+            {
+                var additionalData = svcEx.Error.AdditionalData;
+                var details = additionalData["details"];
+                Console.WriteLine(string.Format("[Error]: '{0}'", details));
+                return false;
+            }
+
+            #endregion
+
+            #region GetTeamsUserActivityCounts
+            try
+            {
+                // Adding a custom serializer to handle CSV and Transmogrify into JSON (NOTE: check ReportCustomSerializers for specific Report Serializer)
+                HttpProvider httpProvider = new HttpProvider(ReportCustomSerializersOptions.teamsUserActivityUserDetailSerializer);
+                GraphServiceClient graphClient = new GraphServiceClient(authProvider, httpProvider);
+
+                // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
+                //var queryOptions = new List<QueryOption>()
+                //    {
+                //        new QueryOption("$format", "application/json")
+                //    };
+
+                var response = await graphClient.Reports.GetTeamsUserActivityUserDetail(period).Request(/* queryOptions */).GetAsync();
+                using (StreamReader sw = new StreamReader(response.Content))
+                {
+                    using (var file = new StreamWriter("c:\\temp\\GetTeamsUserActivityUserDetail.json", false, Encoding.UTF8))
+                    {
+                        file.Write(sw.ReadToEnd());
+                        file.Close();
+                    }
+                }
+            }
+            catch (Microsoft.Graph.ServiceException svcEx)
+            {
+                var additionalData = svcEx.Error.AdditionalData;
+                var details = additionalData["details"];
+                Console.WriteLine(string.Format("[Error]: '{0}'", details));
+                return false;
+            }
+
+            #endregion
+
+            return true;
 
         }
     }

@@ -18,7 +18,6 @@ namespace AccessTeamsReports.Utilities
             
         }
 
-
         public static Report DeserializeCSVReportObject<T>(string inputString)
         {
             T[] records = null;
@@ -40,7 +39,7 @@ namespace AccessTeamsReports.Utilities
                     records = csv.GetRecords<T>().ToArray();
 
                     // Step 2. Serialize POCO to JSON String and fill the MemoryStream to pass back to the pipeline
-                    var jsonString = JsonConvert.SerializeObject(records);
+                    var jsonString = JsonConvert.SerializeObject(records, Formatting.Indented);
                     var jsonMemorryStream = new MemoryStream(Encoding.Default.GetBytes(jsonString));
 
                     // Step 3. Create the new Return value (Report Microsoft.Graph.Class)
