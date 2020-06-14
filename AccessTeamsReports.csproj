@@ -243,7 +243,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Models\TeamsUserActivityCounts.cs" />
+    <Compile Include="Models\TeamsDeviceUsageDistributionUserCounts.cs" />
+    <Compile Include="Models\TeamsDeviceUsageUserCounts.cs" />
     <Compile Include="Models\TeamsUserActivityUserCounts.cs" />
+    <Compile Include="Models\TeamsDeviceUsageUserDetail.cs" />
     <Compile Include="Models\TeamsUserActivityUserDetail.cs" />
     <Compile Include="Utilities\ReportCustomSerializers.cs" />
     <Compile Include="Program.cs" />

@@ -109,5 +109,80 @@ namespace AccessTeamsReports
 
     #region Device Centric Reports
 
+    /// <summary>
+    /// Serialization Class for "graphClient.Reports.GetTeamsDeviceUsageDistributionUserCounts()"
+    /// </summary>
+    public class TeamsDeviceUsageDistributionUserCountsSerializer : Microsoft.Graph.ISerializer
+    {
+
+        public T DeserializeObject<T>(string inputString)
+        {
+            Report report = Helper.DeserializeCSVReportObject<TeamsDeviceUsageDistributionUserCounts>(inputString);
+            return (T)Convert.ChangeType(report, typeof(T));
+        }
+
+        public T DeserializeObject<T>(Stream stream)
+        {
+            return default(T);
+        }
+
+        public string SerializeObject(object serializeableObject)
+        {
+            return "[]";
+        }
+
+
+    }
+
+    /// <summary>
+    /// Serialization Class for "graphClient.Reports.GetTeamsDeviceUsageUserCounts()"
+    /// </summary>
+    public class TeamsDeviceUsageUserCountsSerializer : Microsoft.Graph.ISerializer
+    {
+
+        public T DeserializeObject<T>(string inputString)
+        {
+            Report report = Helper.DeserializeCSVReportObject<TeamsDeviceUsageUserCounts>(inputString);
+            return (T)Convert.ChangeType(report, typeof(T));
+        }
+
+        public T DeserializeObject<T>(Stream stream)
+        {
+            return default(T);
+        }
+
+        public string SerializeObject(object serializeableObject)
+        {
+            return "[]";
+        }
+
+
+    }
+
+    /// <summary>
+    /// Serialization Class for "graphClient.Reports.GetTeamsDeviceUsageUserDetail()"
+    /// </summary>
+    public class TeamsDeviceUsageUserDetailSerializer : Microsoft.Graph.ISerializer
+    {
+
+        public T DeserializeObject<T>(string inputString)
+        {
+            Report report = Helper.DeserializeCSVReportObject<TeamsDeviceUsageUserDetail>(inputString);
+            return (T)Convert.ChangeType(report, typeof(T));
+        }
+
+        public T DeserializeObject<T>(Stream stream)
+        {
+            return default(T);
+        }
+
+        public string SerializeObject(object serializeableObject)
+        {
+            return "[]";
+        }
+
+
+    }
+
     #endregion
 }

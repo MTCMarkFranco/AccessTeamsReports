@@ -15,9 +15,9 @@ namespace AccessTeamsReports.Utilities
         public static TeamsUserActivityUserCountsSerializer teamsUserActivityUserCountsSerializer = new TeamsUserActivityUserCountsSerializer();
 
         // Device Centric Reports
-        //public static TeamsDeviceUsageUserDetailSerializer teamsDeviceUsageUserDetailSerializer = new TeamsDeviceUsageUserDetailSerializer();
-        //public static TeamsDeviceUsageUserCountsSerializer teamsDeviceUsageUserCountsSerializer = new TeamsDeviceUsageUserCountsSerializer();
-        //public static TeamsDeviceUsageDistributionUserCountsSerializer teamsDeviceUsageDistributionUserCountsSerializer = new TeamsDeviceUsageDistributionUserCountsSerializer();
+        public static TeamsDeviceUsageUserDetailSerializer teamsDeviceUsageUserDetailSerializer = new TeamsDeviceUsageUserDetailSerializer();
+        public static TeamsDeviceUsageUserCountsSerializer teamsDeviceUsageUserCountsSerializer = new TeamsDeviceUsageUserCountsSerializer();
+        public static TeamsDeviceUsageDistributionUserCountsSerializer teamsDeviceUsageDistributionUserCountsSerializer = new TeamsDeviceUsageDistributionUserCountsSerializer();
 
     }
 }
