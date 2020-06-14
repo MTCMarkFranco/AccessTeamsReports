@@ -1,10 +1,10 @@
 # AccessTeamsReports
 
-Call the Reports API from the Office SDK for Teams related usages reports in JSON
+Call the Reports API from the Office SDK for Teams related usages reports
 
 ## Description
 
-Call the Reports API from the Office SDK for Teams related usages reports in JSON
+Call the Reports API from the Office SDK for Teams related usages reports and return JSON objects from the CSV that is returned to the Graph Client SDK. Strongly typed models are created and serialized back to formatted JSON (for implementers, you can just pass back the POCO instead of the JSON and use accordingly).
 
 ## Authors
 
