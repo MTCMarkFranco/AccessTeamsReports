@@ -1,15 +1,18 @@
-﻿using AccessTeamsReports.Models;
-using AccessTeamsReports.Utilities;
+﻿using AccessTeamsReports.Utilities;
 using Microsoft.Graph;
 using Microsoft.Graph.Auth;
 using Microsoft.Identity.Client;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace AccessTeamsReports
@@ -21,6 +24,9 @@ namespace AccessTeamsReports
     /// </summary>
     class Program
     {
+
+        public static string accessToken = string.Empty;
+   
         static async Task Main(string[] args)
         {
 
@@ -31,7 +37,7 @@ namespace AccessTeamsReports
                         .WithDefaultRedirectUri()
                         .Build();
            
-            string[] scopes = new string[] { "Organization.ReadWrite.All","Reports.Read.All" };
+            string[] scopes = new string[] { "UserAuthenticationMethod.ReadWrite.All", "Organization.ReadWrite.All","Reports.Read.All" };
             var accounts = await publicClientApplication.GetAccountsAsync();
             
             AuthenticationResult result;
@@ -39,21 +45,26 @@ namespace AccessTeamsReports
             {
                 result = await publicClientApplication.AcquireTokenSilent(scopes, accounts.FirstOrDefault())
                             .ExecuteAsync();
+                
+                accessToken = result.AccessToken;
             }
             catch (MsalUiRequiredException)
             {
                 result = await publicClientApplication.AcquireTokenInteractive(scopes)
                             .ExecuteAsync();
+
+                accessToken = result.AccessToken;
             }
 
-            // Create the Autentication Provider with Proper Scopes for TEams Reporting APIs
+            // Create the Autentication Provider with Proper Scopes for Graph APIs
             DeviceCodeProvider authProvider = new DeviceCodeProvider(publicClientApplication, scopes);
 
             #endregion
 
-            #region Calling Reports APIs
+            
+            #region Calling Graph Beta APIs
             // Call the APIs with the newly formed Authentication Provider
-            bool success = await PullTeamsReports(authProvider);
+            bool success = await RunAuthenticationMethodPhoneUpdate(authProvider);
 
             if (success)
                 Console.WriteLine("Jobs Finished!");
@@ -68,210 +79,70 @@ namespace AccessTeamsReports
 
         }
 
-        private async static Task<bool> PullTeamsReports(DeviceCodeProvider authProvider)
+        private async static Task<bool> RunAuthenticationMethodPhoneUpdate(DeviceCodeProvider authProvider)
         {
-            const string period = "D7"; // 7 Days Worth of Data. Other options (D7,D30,D90,D180)
-
-            #region GetTeamsUserActivityUserCounts
+           
+            #region AuthenticationMethodPhoneUpdate
             try
             {
-                // Adding a custom serializer to handle CSV and Transmogrify into JSON (NOTE: check ReportCustomSerializers for specific Report Serializer)
-                HttpProvider httpProvider = new HttpProvider(ReportCustomSerializersOptions.teamsUserActivityUserCountsSerializer);
-                GraphServiceClient graphClient = new GraphServiceClient(authProvider, httpProvider);
-
-                // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
-                //var queryOptions = new List<QueryOption>()
-                //    {
-                //        new QueryOption("$format", "application/json")
-                //    };
-
-                var response = await graphClient.Reports.GetTeamsUserActivityUserCounts(period).Request(/* queryOptions */).GetAsync();
-                using (StreamReader sw = new StreamReader(response.Content))
-                {
-                    using (var file = new StreamWriter("c:\\temp\\GetTeamsUserActivityUserCounts.json", false, Encoding.UTF8))
+                const string AAD_USER_ID = "2fcce8ce-dd74-4e86-afec-66733b59a06e";
+                GraphServiceClient graphClient = new GraphServiceClient(authProvider);
+                
+                var queryOptions = new List<QueryOption>()
                     {
-                        file.Write(sw.ReadToEnd());
-                        file.Close();
-                    }
+                        // Options are 'mobile', 'alternateMobile', 'office'
+                        new QueryOption("$filter", "phoneType eq 'mobile'"),
+                        new QueryOption("$format", "application/json")
+                    };
+
+                // Get the ID (Record) of the phoneAuthenticationMethod that we want 
+                var responseGet = await graphClient.Users[AAD_USER_ID]
+                                     .Authentication.PhoneMethods.Request(queryOptions).GetAsync();
+
+                // The Phone Update Method to udate based on ID
+                string PhoneMethodID = responseGet[0].Id;
+                
+                // Update the Mobile Phone based on the Phone Authentication Method Above
+                var phoneAuthenticationMethod = new PhoneAuthenticationMethod
+                {
+                    PhoneNumber = "+1 2065550000",
+                    PhoneType = AuthenticationPhoneType.Mobile
+                };
+
+                // Serialize the PhoneAuthenticationMethod to pass to the low level HTTP functions as we are 
+                // bypassing the Graph Client SDK for this one call
+                string jsonphoneAuthenticationMethod = System.Text.Json.JsonSerializer.Serialize(phoneAuthenticationMethod, new JsonSerializerOptions { WriteIndented = true, IgnoreNullValues = true });
+
+                // NOTE: THIS SDK CODE IS BROKEN Because it sends a PATCH not a PUT
+                //var responsePut = await graphClient.Users[AAD_USER_ID]
+                //                    .Authentication.PhoneMethods[PhoneMethodID].Request().(phoneAuthenticationMethod);
+
+                // Manually Constructing the PUT Call to the Graph API
+                HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Put,
+                    string.Format("https://graph.microsoft.com/beta/users/{0}/authentication/phoneMethods/{1}",
+                                    AAD_USER_ID, PhoneMethodID));
+                request.Content = new StringContent(jsonphoneAuthenticationMethod, Encoding.UTF8, "application/json");
+                request.Headers.Add("Authorization", string.Format("Bearer {0}", accessToken));
+
+                var responsePut = await graphClient.HttpProvider.SendAsync(request);
+
+                if (responsePut.StatusCode != System.Net.HttpStatusCode.OK)
+                {
+                    return false;
                 }
             }
-            catch (Microsoft.Graph.ServiceException svcEx)
+            catch (Exception svcEx)
             {
-                var additionalData = svcEx.Error.AdditionalData;
-                var details = additionalData["details"];
-                Console.WriteLine(string.Format("[Error]: '{0}'", details));
+                
+                Console.WriteLine(string.Format("[Error]: '{0}'", svcEx.Message));
                 return false;
             }
-
-            #endregion
-
-            #region GetTeamsUserActivityCounts
-            try
-            {
-                // Adding a custom serializer to handle CSV and Transmogrify into JSON (NOTE: check ReportCustomSerializers for specific Report Serializer)
-                HttpProvider httpProvider = new HttpProvider(ReportCustomSerializersOptions.teamsUserActivityCountsSerializer);
-                GraphServiceClient graphClient = new GraphServiceClient(authProvider, httpProvider);
-
-                // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
-                //var queryOptions = new List<QueryOption>()
-                //    {
-                //        new QueryOption("$format", "application/json")
-                //    };
-
-                var response = await graphClient.Reports.GetTeamsUserActivityCounts(period).Request(/* queryOptions */).GetAsync();
-                using (StreamReader sw = new StreamReader(response.Content))
-                {
-                    using (var file = new StreamWriter("c:\\temp\\GetTeamsUserActivityCounts.json", false, Encoding.UTF8))
-                    {
-                        file.Write(sw.ReadToEnd());
-                        file.Close();
-                    }
-                }
-            }
-            catch (Microsoft.Graph.ServiceException svcEx)
-            {
-                var additionalData = svcEx.Error.AdditionalData;
-                var details = additionalData["details"];
-                Console.WriteLine(string.Format("[Error]: '{0}'", details));
-                return false;
-            }
-
-            #endregion
-
-            #region GetTeamsUserActivityCounts
-            try
-            {
-                // Adding a custom serializer to handle CSV and Transmogrify into JSON (NOTE: check ReportCustomSerializers for specific Report Serializer)
-                HttpProvider httpProvider = new HttpProvider(ReportCustomSerializersOptions.teamsUserActivityUserDetailSerializer);
-                GraphServiceClient graphClient = new GraphServiceClient(authProvider, httpProvider);
-
-                // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
-                //var queryOptions = new List<QueryOption>()
-                //    {
-                //        new QueryOption("$format", "application/json")
-                //    };
-
-                var response = await graphClient.Reports.GetTeamsUserActivityUserDetail(period).Request(/* queryOptions */).GetAsync();
-                using (StreamReader sw = new StreamReader(response.Content))
-                {
-                    using (var file = new StreamWriter("c:\\temp\\GetTeamsUserActivityUserDetail.json", false, Encoding.UTF8))
-                    {
-                        file.Write(sw.ReadToEnd());
-                        file.Close();
-                    }
-                }
-            }
-            catch (Microsoft.Graph.ServiceException svcEx)
-            {
-                var additionalData = svcEx.Error.AdditionalData;
-                var details = additionalData["details"];
-                Console.WriteLine(string.Format("[Error]: '{0}'", details));
-                return false;
-            }
-
-            #endregion
-
-            #region GetTeamsDeviceUsageDistributionUserCounts
-            try
-            {
-                // Adding a custom serializer to handle CSV and Transmogrify into JSON (NOTE: check ReportCustomSerializers for specific Report Serializer)
-                HttpProvider httpProvider = new HttpProvider(ReportCustomSerializersOptions.teamsDeviceUsageDistributionUserCountsSerializer);
-                GraphServiceClient graphClient = new GraphServiceClient(authProvider, httpProvider);
-
-                // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
-                //var queryOptions = new List<QueryOption>()
-                //    {
-                //        new QueryOption("$format", "application/json")
-                //    };
-
-                var response = await graphClient.Reports.GetTeamsDeviceUsageDistributionUserCounts(period).Request(/* queryOptions */).GetAsync();
-                using (StreamReader sw = new StreamReader(response.Content))
-                {
-                    using (var file = new StreamWriter("c:\\temp\\GetTeamsDeviceUsageDistributionUserCounts.json", false, Encoding.UTF8))
-                    {
-                        file.Write(sw.ReadToEnd());
-                        file.Close();
-                    }
-                }
-            }
-            catch (Microsoft.Graph.ServiceException svcEx)
-            {
-                var additionalData = svcEx.Error.AdditionalData;
-                var details = additionalData["details"];
-                Console.WriteLine(string.Format("[Error]: '{0}'", details));
-                return false;
-            }
-
-            #endregion
-
-            #region GetTeamsDeviceUsageUserCounts
-            try
-            {
-                // Adding a custom serializer to handle CSV and Transmogrify into JSON (NOTE: check ReportCustomSerializers for specific Report Serializer)
-                HttpProvider httpProvider = new HttpProvider(ReportCustomSerializersOptions.teamsDeviceUsageUserCountsSerializer);
-                GraphServiceClient graphClient = new GraphServiceClient(authProvider, httpProvider);
-
-                // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
-                //var queryOptions = new List<QueryOption>()
-                //    {
-                //        new QueryOption("$format", "application/json")
-                //    };
-
-                var response = await graphClient.Reports.GetTeamsDeviceUsageUserCounts(period).Request(/* queryOptions */).GetAsync();
-                using (StreamReader sw = new StreamReader(response.Content))
-                {
-                    using (var file = new StreamWriter("c:\\temp\\GetTeamsDeviceUsageUserCounts.json", false, Encoding.UTF8))
-                    {
-                        file.Write(sw.ReadToEnd());
-                        file.Close();
-                    }
-                }
-            }
-            catch (Microsoft.Graph.ServiceException svcEx)
-            {
-                var additionalData = svcEx.Error.AdditionalData;
-                var details = additionalData["details"];
-                Console.WriteLine(string.Format("[Error]: '{0}'", details));
-                return false;
-            }
-
-            #endregion
-
-            #region GetTeamsDeviceUsageUserDetail
-            try
-            {
-                // Adding a custom serializer to handle CSV and Transmogrify into JSON (NOTE: check ReportCustomSerializers for specific Report Serializer)
-                HttpProvider httpProvider = new HttpProvider(ReportCustomSerializersOptions.teamsDeviceUsageUserDetailSerializer);
-                GraphServiceClient graphClient = new GraphServiceClient(authProvider, httpProvider);
-
-                // TODO: MS Not implemented this feature on the Reports APIs (Only CSV at this point)
-                //var queryOptions = new List<QueryOption>()
-                //    {
-                //        new QueryOption("$format", "application/json")
-                //    };
-
-                var response = await graphClient.Reports.GetTeamsDeviceUsageUserDetail(period).Request(/* queryOptions */).GetAsync();
-                using (StreamReader sw = new StreamReader(response.Content))
-                {
-                    using (var file = new StreamWriter("c:\\temp\\GetTeamsDeviceUsageUserDetail.json", false, Encoding.UTF8))
-                    {
-                        file.Write(sw.ReadToEnd());
-                        file.Close();
-                    }
-                }
-            }
-            catch (Microsoft.Graph.ServiceException svcEx)
-            {
-                var additionalData = svcEx.Error.AdditionalData;
-                var details = additionalData["details"];
-                Console.WriteLine(string.Format("[Error]: '{0}'", details));
-                return false;
-            }
-
-            #endregion
-
 
             return true;
+
+            #endregion
+                      
+           
 
         }
     }
