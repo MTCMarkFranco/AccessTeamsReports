@@ -18,7 +18,6 @@ using System.Threading.Tasks;
 namespace AccessTeamsReports
 {
     /// <summary>
-    /// Written override default behaviour of Reporting APIs for Team Activity to Serialize to JSON
     /// Author: Mark Franco - Microsft Technology Centre (Toronto)
     /// Note: Sample code provided as-is, not for direct use into production (To be used as a learning tool)
     /// </summary>
@@ -37,7 +36,7 @@ namespace AccessTeamsReports
                         .WithDefaultRedirectUri()
                         .Build();
            
-            string[] scopes = new string[] { "UserAuthenticationMethod.ReadWrite.All", "Organization.ReadWrite.All","Reports.Read.All" };
+            string[] scopes = new string[] { "UserAuthenticationMethod.ReadWrite.All", "User.Read.All" };
             var accounts = await publicClientApplication.GetAccountsAsync();
             
             AuthenticationResult result;
@@ -85,51 +84,73 @@ namespace AccessTeamsReports
             #region AuthenticationMethodPhoneUpdate
             try
             {
-                const string AAD_USER_ID = "2fcce8ce-dd74-4e86-afec-66733b59a06e";
+                const string AAD_USER = "marframfa@corusdev.onmicrosoft.com";
                 GraphServiceClient graphClient = new GraphServiceClient(authProvider);
-                
-                var queryOptions = new List<QueryOption>()
+
+                // Step 1. Get the User ID for the given UPN
+                #region Step 1
+                    var queryOptionsUsers = new List<QueryOption>()
+                                {
+                                    new QueryOption("$filter", string.Format("userPrincipalName eq '{0}'",AAD_USER)),
+                                    new QueryOption("$format", "application/json")
+                                };
+
+                var responseUserInfo = await graphClient.Users.Request(queryOptionsUsers).GetAsync();
+
+                string aadUserID = responseUserInfo[0].Id;
+
+                #endregion
+
+                // Step 2. Get the ID (Record) of the phoneAuthenticationMethod that we want (mobile in this case)
+                #region Step 2
+                var queryOptionsAuthMethod = new List<QueryOption>()
+                            {
+                                // Options are 'mobile', 'alternateMobile', 'office'
+                                new QueryOption("$filter", "phoneType eq 'mobile'"),
+                                new QueryOption("$format", "application/json")
+                            };
+                    var responseAuthMethod = await graphClient.Users[aadUserID]
+                                         .Authentication.PhoneMethods.Request(queryOptionsAuthMethod).GetAsync();
+                #endregion
+
+                // Step 3. Get the ID of the AuthenticationMethod type (Mobile) for the next Graph Call
+                #region Step 3
+                    string AuthMethodId = responseAuthMethod[0].Id;
+                #endregion
+
+                // Step 4. Update the Mobile Phone based on the Phone Authentication Method
+                #region step 4
+                    var phoneAuthenticationMethod = new PhoneAuthenticationMethod
                     {
-                        // Options are 'mobile', 'alternateMobile', 'office'
-                        new QueryOption("$filter", "phoneType eq 'mobile'"),
-                        new QueryOption("$format", "application/json")
+                        PhoneNumber = "+1 2065550000",
+                        PhoneType = AuthenticationPhoneType.Mobile
                     };
 
-                // Get the ID (Record) of the phoneAuthenticationMethod that we want 
-                var responseGet = await graphClient.Users[AAD_USER_ID]
-                                     .Authentication.PhoneMethods.Request(queryOptions).GetAsync();
+                    // Serialize the PhoneAuthenticationMethod to pass to the low level HTTP functions as we are 
+                    // bypassing the Graph Client SDK for this one call
+                    string jsonphoneAuthenticationMethod = System.Text.Json.JsonSerializer.Serialize(phoneAuthenticationMethod, 
+                           new JsonSerializerOptions { WriteIndented = true, IgnoreNullValues = true });
 
-                // The Phone Update Method to udate based on ID
-                string PhoneMethodID = responseGet[0].Id;
-                
-                // Update the Mobile Phone based on the Phone Authentication Method Above
-                var phoneAuthenticationMethod = new PhoneAuthenticationMethod
-                {
-                    PhoneNumber = "+1 2065550000",
-                    PhoneType = AuthenticationPhoneType.Mobile
-                };
+                    // NOTE: THIS SDK CODE IS BROKEN Because it sends a PATCH not a PUT
+                    //var responsePut = await graphClient.Users[AAD_USER_ID]
+                    //                    .Authentication.PhoneMethods[PhoneMethodID].Request().(phoneAuthenticationMethod);
 
-                // Serialize the PhoneAuthenticationMethod to pass to the low level HTTP functions as we are 
-                // bypassing the Graph Client SDK for this one call
-                string jsonphoneAuthenticationMethod = System.Text.Json.JsonSerializer.Serialize(phoneAuthenticationMethod, new JsonSerializerOptions { WriteIndented = true, IgnoreNullValues = true });
+                    // Manually Constructing the PUT Call to the Graph API
+                    HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Put,
+                        string.Format("https://graph.microsoft.com/beta/users/{0}/authentication/phoneMethods/{1}",
+                                        aadUserID, AuthMethodId));
+                    request.Content = new StringContent(jsonphoneAuthenticationMethod, Encoding.UTF8, "application/json");
+                    request.Headers.Add("Authorization", string.Format("Bearer {0}", accessToken));
 
-                // NOTE: THIS SDK CODE IS BROKEN Because it sends a PATCH not a PUT
-                //var responsePut = await graphClient.Users[AAD_USER_ID]
-                //                    .Authentication.PhoneMethods[PhoneMethodID].Request().(phoneAuthenticationMethod);
+                    var responseAuthMethodMobileUpdate = await graphClient.HttpProvider.SendAsync(request);
 
-                // Manually Constructing the PUT Call to the Graph API
-                HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Put,
-                    string.Format("https://graph.microsoft.com/beta/users/{0}/authentication/phoneMethods/{1}",
-                                    AAD_USER_ID, PhoneMethodID));
-                request.Content = new StringContent(jsonphoneAuthenticationMethod, Encoding.UTF8, "application/json");
-                request.Headers.Add("Authorization", string.Format("Bearer {0}", accessToken));
+                    if (responseAuthMethodMobileUpdate.StatusCode != System.Net.HttpStatusCode.OK)
+                    {
+                        return false;
+                    }
 
-                var responsePut = await graphClient.HttpProvider.SendAsync(request);
+                #endregion
 
-                if (responsePut.StatusCode != System.Net.HttpStatusCode.OK)
-                {
-                    return false;
-                }
             }
             catch (Exception svcEx)
             {
