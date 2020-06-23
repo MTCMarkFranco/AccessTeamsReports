@@ -1,4 +1,5 @@
 ﻿using AccessTeamsReports.Utilities;
+using Azure.Core;
 using Microsoft.Graph;
 using Microsoft.Graph.Auth;
 using Microsoft.Identity.Client;
@@ -24,8 +25,6 @@ namespace AccessTeamsReports
     class Program
     {
 
-        public static string accessToken = string.Empty;
-   
         static async Task Main(string[] args)
         {
 
@@ -45,14 +44,12 @@ namespace AccessTeamsReports
                 result = await publicClientApplication.AcquireTokenSilent(scopes, accounts.FirstOrDefault())
                             .ExecuteAsync();
                 
-                accessToken = result.AccessToken;
-            }
+             }
             catch (MsalUiRequiredException)
             {
                 result = await publicClientApplication.AcquireTokenInteractive(scopes)
                             .ExecuteAsync();
 
-                accessToken = result.AccessToken;
             }
 
             // Create the Autentication Provider with Proper Scopes for Graph APIs
@@ -131,23 +128,26 @@ namespace AccessTeamsReports
                     string jsonphoneAuthenticationMethod = System.Text.Json.JsonSerializer.Serialize(phoneAuthenticationMethod, 
                            new JsonSerializerOptions { WriteIndented = true, IgnoreNullValues = true });
 
-                    // NOTE: THIS SDK CODE IS BROKEN Because it sends a PATCH not a PUT
-                    //var responsePut = await graphClient.Users[AAD_USER_ID]
-                    //                    .Authentication.PhoneMethods[PhoneMethodID].Request().(phoneAuthenticationMethod);
+                // NOTE: THIS SDK CODE IS BROKEN Because it sends a PATCH not a PUT
+                //var responsePut = await graphClient.Users[AAD_USER_ID]
+                //                    .Authentication.PhoneMethods[PhoneMethodID].Request().UpdateAsync(phoneAuthenticationMethod);
+                var formulatedGraphRequestRequest = graphClient.Users[aadUserID]
+                                    .Authentication.PhoneMethods[AuthMethodId].Request().GetHttpRequestMessage();
 
-                    // Manually Constructing the PUT Call to the Graph API
-                    HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Put,
-                        string.Format("https://graph.microsoft.com/beta/users/{0}/authentication/phoneMethods/{1}",
-                                        aadUserID, AuthMethodId));
-                    request.Content = new StringContent(jsonphoneAuthenticationMethod, Encoding.UTF8, "application/json");
-                    request.Headers.Add("Authorization", string.Format("Bearer {0}", accessToken));
+                // Update the body + the Method to PUT as UpdateAsynch uses Patch
+                formulatedGraphRequestRequest.Content = new StringContent(jsonphoneAuthenticationMethod, Encoding.UTF8, "application/json");
+                formulatedGraphRequestRequest.Method = HttpMethod.Put;
 
-                    var responseAuthMethodMobileUpdate = await graphClient.HttpProvider.SendAsync(request);
+                // Call the GraphClientFactory to get the raw HTTP request plus Authentication + 
+                // Rate limiting capabilities, etc, which are already built into the request object with the SDK
+                var httpGraphConfiguredClient = GraphClientFactory.Create(authProvider);
 
-                    if (responseAuthMethodMobileUpdate.StatusCode != System.Net.HttpStatusCode.OK)
-                    {
-                        return false;
-                    }
+                var responseAuthMethodMobileUpdate = httpGraphConfiguredClient.SendAsync(formulatedGraphRequestRequest).GetAwaiter().GetResult();
+
+                if (responseAuthMethodMobileUpdate.StatusCode != System.Net.HttpStatusCode.OK)
+                {
+                    return false;
+                }
 
                 #endregion
 
